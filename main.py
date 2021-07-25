@@ -1,0 +1,196 @@
+import chess
+import chess.syzygy
+import random
+import numpy as np
+import pickle as pkl
+
+
+def gen_fen(material):
+    """Return a board with the specific material balance"""""
+    # Step 1: Create a blank board with either white or black to move
+    # We are assuming no castling or ep capture will be possible
+    if random.randint(0, 1) == 1:
+        board = chess.Board('8/8/8/8/8/8/8/8 w - - 0 1')
+    else:
+        board = chess.Board('8/8/8/8/8/8/8/8 b - - 0 1')
+
+    # Step 2: Decide whether the first group of material is for white or black
+    if random.randint(0, 1) == 1:
+        material = material.swapcase()
+
+    # Step 3: Loop over material and add it to the board
+    dest_squares = random.sample(range(64), len(material))
+    for piece in material:
+        location = dest_squares.pop()
+        board.set_piece_at(location, chess.Piece.from_symbol(piece))
+    # Step 4: Check that the position is valid
+    if board.is_valid():
+        pass
+    else:
+        # Recursively get a new try
+        board = gen_fen(material)
+    return board
+
+
+def is_white_square(square):
+    """Returns True if the square is on the 'white' diagonals"""
+    file = chess.square_file(square)
+    rank = chess.square_rank(square)
+    if (file + rank) % 2 == 0:
+        return 1
+    else:
+        return 0
+
+
+def board_to_plane(board):
+    """Takes a board position and translates it into a plane of binary values"""
+    """Old code that returned a vector"""
+    # 0-63,448-511: bishop on dark squares    PNBRQK == 123456
+    # 64- 512-:  black pawns, white pawns     white = True, black = False
+    # 128- 576-: knight
+    # 192- 640-: bishop on light squares
+    # 256- 704-: rook
+    # 320- 768-: queen
+    # 384- 832-895: king
+    # The location of a square is described by:
+    # 448*(color white=1 black=0) + 64*(piecetype 1-6) + square
+    #     - 64*3*is_a_bishop*is_on_light_square
+    # 896-961 : side to move color (white = 1s)
+    plane = np.zeros(896, dtype=int)
+    for square in range(64):
+        piece_type = board.piece_type_at(square)
+        if piece_type is None:
+            pass
+        else:
+            if board.color_at(square) == chess.WHITE:
+                piece_color = 1
+            else:
+                piece_color = 0
+            index = 448 * piece_color + 64 * piece_type + square
+            if piece_type == chess.BISHOP:
+                # Bishops on white diagonals go in the 0 index instead of 3.
+                index = index - 64 * 3 * is_white_square(square)
+            plane[index] = 1
+    if board.turn == chess.WHITE:
+        col = np.ones(64)
+    else:
+        col = np.zeros(64)
+    # print(plane)
+    plane2 = np.concatenate((plane, col))
+    return plane2
+
+
+def board_to_plane2(board):
+    """Takes a board position and translates it into a planes of binary values"""
+    """New code retains the 8x8 planes"""
+    # The resulting plane will be (8,8,15) - apparently tensorflow prefers channels last
+    # 0, 7: bishop on dark squares    PNBRQK == 123456
+    # 1- 8-:  black pawns, white pawns     white = True, black = False
+    # 2- 9-: knight
+    # 3- 10-: bishop on light squares
+    # 4- 11-: rook
+    # 5- 12-: queen
+    # 6- 13 : king
+    # 14    : color white = 1
+    # The location of a square is described by:
+    # 448*(color white=1 black=0) + 64*(piecetype 1-6) + square
+    #     - 64*3*is_a_bishop*is_on_light_square
+    # 896-961 : side to move color (white = 1s)
+    plane = np.zeros((8, 8, 15), dtype=int)
+    for square in range(64):
+        piece_type = board.piece_type_at(square)
+        if piece_type is None:
+            pass
+        else:
+            if board.color_at(square) == chess.WHITE:
+                piece_color = 1
+            else:
+                piece_color = 0
+            file = chess.square_file(square)
+            rank = chess.square_rank(square)
+            index = 7 * piece_color + piece_type
+            if piece_type == chess.BISHOP:
+                # Bishops on white diagonals go in the 0/7 index instead of 3/10.
+                index = index - 3 * is_white_square(square)
+
+            plane[rank, file, index] = 1
+    if board.turn == chess.WHITE:
+        col = 1
+    else:
+        col = 0
+    plane[:, :, 14] = col
+    return plane
+
+
+def board_label(board):
+    """Returns the training labels for the board from Syzygy lookup"""
+    # 0 draw for side-to-move, 1 win for side-to-move (more than 50 moves), 2 win for side-to-move
+    # -1 loss in more than 50, -2 loss in <50
+    with chess.syzygy.open_tablebase("c:/games/chess/syzygy") as tablebase:
+        # board = chess.Board("8/2K5/4B3/3N4/8/8/4k3/8 b - - 0 1")
+        wdl = tablebase.probe_wdl(board)
+
+    # 0 draw, x win in x, -x loss in x
+    # counts may be off by 1
+    with chess.syzygy.open_tablebase("c:/games/chess/syzygy") as tablebase:
+        # board = chess.Board("8/2K5/4B3/3N4/8/8/4k3/8 b - - 0 1")
+        dtz = tablebase.probe_dtz(board)
+    if wdl == 0:
+        win = 0
+        draw = 1
+        loss = 0
+    elif wdl > 0:
+        win = 1
+        draw = 0
+        loss = 0
+    else:
+        win = 0
+        draw = 0
+        loss = 1
+    if dtz > 0:
+        quality = 2000 - dtz
+    elif dtz < 0:
+        quality = -2000 - dtz
+    else:
+        quality = 0
+
+    return win, draw, loss, quality
+
+
+if __name__ == '__main__':
+    # material_balance = 'KRPkq'
+    material_balance = 'KRk'
+
+    # Note: it took about 1:30 to run 10,000 positions
+    X_train = []
+    y_train = []
+    for i in range(300000):
+        my_board = gen_fen(material_balance)
+        my_plane = board_to_plane2(my_board)
+        my_label = board_label(my_board)
+        X_train.append(my_plane)
+        y_train.append(my_label)
+        print(i)
+
+    # Converts from a list to an array at the end; faster than concat array
+    X_train = np.stack(X_train, axis=0)
+    y_train = np.stack(y_train, axis=0)
+    print(X_train.shape)
+    print(y_train.shape)
+
+    outfile = "C:/games/chess/train_krk300k.npz"
+    # Save as a compressed npz file
+    np.savez_compressed(outfile, X_train=X_train, y_train=y_train)
+    print(f"Data saved to {outfile}")
+
+    # test that we can read the data
+    print("Doing a test read of the data")
+    npzfile2 = np.load(outfile)
+    #    print("npz variables")
+    #    print(npzfile.files)
+    #    print(npzfile['y_train'])
+    X_t2 = npzfile2['X_train']
+    y_t2 = npzfile2['y_train']
+    print(X_t2.shape)
+    print(y_t2.shape)
+    #print(y_t2)
