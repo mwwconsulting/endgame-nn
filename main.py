@@ -80,7 +80,7 @@ def board_to_plane(board):
     return plane2
 
 
-def board_to_plane2(board):
+def board_to_planev1(board):
     """Takes a board position and translates it into a planes of binary values"""
     """New code retains the 8x8 planes"""
     # The resulting plane will be (8,8,15) - apparently tensorflow prefers channels last
@@ -157,16 +157,50 @@ def board_label(board):
     return win, draw, loss, quality
 
 
-if __name__ == '__main__':
-    # material_balance = 'KRPkq'
-    material_balance = 'KRk'
+def adjust_case(input_str):
+    """This converts endgame descriptors so that the first block is capitalized"""
+    """and the second block is lowercase.  e.g.  krpkq to KRPkq"""
+    lower = input_str.lower()
+    second_k = lower.find("k", 1)
+    # print(f"second k at {second_k}")
+    out1 = lower[:second_k].upper()
+    out2 = lower[second_k:]
+    output_str = out1+out2
+    if second_k == -1:
+        output_str = "fail"
+    return output_str
 
-    # Note: it took about 1:30 to run 10,000 positions
+
+def ask_for_input():
+    print("Welcome to chess_pos_gen")
+    print("We are going to generate a file of chess endgame training examples")
+    print("to use in training a neural net.")
+    need_input = True
+    while need_input:
+        balance = input("Please enter the endgame (e.g. KRkp): ")
+        balance = adjust_case(balance)
+        # print(f"After Adjusting: {balance}")
+        number = int(input("Please enter the number of training examples to create: "))
+        if number > 0:
+            need_input = False
+        if balance == "fail":
+            need_input = True
+        if need_input:
+            print("There was a problem with the inputs.")
+
+    return balance, number
+
+
+if __name__ == '__main__':
+
+    material_balance, target_count = ask_for_input()
+
+    # Note: it took about 1:30 to generate 10,000 positions
     X_train = []
     y_train = []
-    for i in range(300000):
+    for i in range(target_count):
         my_board = gen_fen(material_balance)
-        my_plane = board_to_plane2(my_board)
+        my_plane = board_to_planev1(my_board)
         my_label = board_label(my_board)
         X_train.append(my_plane)
         y_train.append(my_label)
@@ -178,7 +212,7 @@ if __name__ == '__main__':
     print(X_train.shape)
     print(y_train.shape)
 
-    outfile = "C:/games/chess/train_krk300k.npz"
+    outfile = "C:/games/chess/train_krk300kv1.npz"
     # Save as a compressed npz file
     np.savez_compressed(outfile, X_train=X_train, y_train=y_train)
     print(f"Data saved to {outfile}")
