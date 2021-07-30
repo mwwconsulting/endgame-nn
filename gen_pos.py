@@ -171,15 +171,12 @@ def adjust_case(input_str):
 
 
 def ask_for_input():
-    print("Welcome to chess_pos_gen")
-    print("We are going to generate a file of chess endgame training examples")
-    print("to use in training a neural net.")
     need_input = True
     while need_input:
         balance = input("Please enter the endgame (e.g. KRkp): ")
         balance = adjust_case(balance)
         # print(f"After Adjusting: {balance}")
-        number = int(input("Please enter the number of training examples to create: "))
+        number = int(input("Please enter the number of training examples: "))
         if number > 0:
             need_input = False
         if balance == "fail":
@@ -192,7 +189,7 @@ def ask_for_input():
 
 def generate_training():
     material_balance, target_count = ask_for_input()
-
+    plane_version = 'v1'
     # Note: it took about 1:30 to generate 10,000 positions
     X_train = []
     y_train = []
@@ -210,19 +207,19 @@ def generate_training():
     print(X_train.shape)
     print(y_train.shape)
 
-    outfile = "C:/games/chess/train_krk300kv1.npz"
+    outfile = "C:/games/chess/train_"+material_balance+str(int(target_count/1000))+"K"+plane_version+".npz"
     # Save as a compressed npz file
     np.savez_compressed(outfile, X_train=X_train, y_train=y_train)
     print(f"Data saved to {outfile}")
 
     # test that we can read the data
-    print("Doing a test read of the data")
-    npzfile2 = np.load(outfile)
+    # print("Doing a test read of the data")
+    # npzfile2 = np.load(outfile)
     #    print("npz variables")
     #    print(npzfile.files)
     #    print(npzfile['y_train'])
-    X_t2 = npzfile2['X_train']
-    y_t2 = npzfile2['y_train']
-    print(X_t2.shape)
-    print(y_t2.shape)
+    # X_t2 = npzfile2['X_train']
+    # y_t2 = npzfile2['y_train']
+    # print(X_t2.shape)
+    # print(y_t2.shape)
     #print(y_t2)
