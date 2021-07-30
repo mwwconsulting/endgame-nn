@@ -1,230 +1,70 @@
-import chess
-import chess.syzygy
-import random
+# Import relevant modules
 import numpy as np
-import pickle as pkl
+import pandas as pd
+import tensorflow as tf
+from matplotlib import pyplot as plt
+import import_data as imp
+import train_model as train
+import define_model as defmod
+import graph as gr
+import gen_pos as gp
 
-
-def gen_fen(material):
-    """Return a board with the specific material balance"""""
-    # Step 1: Create a blank board with either white or black to move
-    # We are assuming no castling or ep capture will be possible
-    if random.randint(0, 1) == 1:
-        board = chess.Board('8/8/8/8/8/8/8/8 w - - 0 1')
-    else:
-        board = chess.Board('8/8/8/8/8/8/8/8 b - - 0 1')
-
-    # Step 2: Decide whether the first group of material is for white or black
-    if random.randint(0, 1) == 1:
-        material = material.swapcase()
-
-    # Step 3: Loop over material and add it to the board
-    dest_squares = random.sample(range(64), len(material))
-    for piece in material:
-        location = dest_squares.pop()
-        board.set_piece_at(location, chess.Piece.from_symbol(piece))
-    # Step 4: Check that the position is valid
-    if board.is_valid():
+def ask_gen_training():
+    yes_no = input("Do you need to generate endgame training data? ")
+    if len(yes_no) == 0:
         pass
-    else:
-        # Recursively get a new try
-        board = gen_fen(material)
-    return board
+    elif yes_no[0].lower() == "y":
+        gp.generate_training()
 
 
-def is_white_square(square):
-    """Returns True if the square is on the 'white' diagonals"""
-    file = chess.square_file(square)
-    rank = chess.square_rank(square)
-    if (file + rank) % 2 == 0:
-        return 1
-    else:
-        return 0
-
-
-def board_to_plane(board):
-    """Takes a board position and translates it into a plane of binary values"""
-    """Old code that returned a vector"""
-    # 0-63,448-511: bishop on dark squares    PNBRQK == 123456
-    # 64- 512-:  black pawns, white pawns     white = True, black = False
-    # 128- 576-: knight
-    # 192- 640-: bishop on light squares
-    # 256- 704-: rook
-    # 320- 768-: queen
-    # 384- 832-895: king
-    # The location of a square is described by:
-    # 448*(color white=1 black=0) + 64*(piecetype 1-6) + square
-    #     - 64*3*is_a_bishop*is_on_light_square
-    # 896-961 : side to move color (white = 1s)
-    plane = np.zeros(896, dtype=int)
-    for square in range(64):
-        piece_type = board.piece_type_at(square)
-        if piece_type is None:
-            pass
-        else:
-            if board.color_at(square) == chess.WHITE:
-                piece_color = 1
-            else:
-                piece_color = 0
-            index = 448 * piece_color + 64 * piece_type + square
-            if piece_type == chess.BISHOP:
-                # Bishops on white diagonals go in the 0 index instead of 3.
-                index = index - 64 * 3 * is_white_square(square)
-            plane[index] = 1
-    if board.turn == chess.WHITE:
-        col = np.ones(64)
-    else:
-        col = np.zeros(64)
-    # print(plane)
-    plane2 = np.concatenate((plane, col))
-    return plane2
-
-
-def board_to_planev1(board):
-    """Takes a board position and translates it into a planes of binary values"""
-    """New code retains the 8x8 planes"""
-    # The resulting plane will be (8,8,15) - apparently tensorflow prefers channels last
-    # 0, 7: bishop on dark squares    PNBRQK == 123456
-    # 1- 8-:  black pawns, white pawns     white = True, black = False
-    # 2- 9-: knight
-    # 3- 10-: bishop on light squares
-    # 4- 11-: rook
-    # 5- 12-: queen
-    # 6- 13 : king
-    # 14    : color white = 1
-    # The location of a square is described by:
-    # 448*(color white=1 black=0) + 64*(piecetype 1-6) + square
-    #     - 64*3*is_a_bishop*is_on_light_square
-    # 896-961 : side to move color (white = 1s)
-    plane = np.zeros((8, 8, 15), dtype=int)
-    for square in range(64):
-        piece_type = board.piece_type_at(square)
-        if piece_type is None:
-            pass
-        else:
-            if board.color_at(square) == chess.WHITE:
-                piece_color = 1
-            else:
-                piece_color = 0
-            file = chess.square_file(square)
-            rank = chess.square_rank(square)
-            index = 7 * piece_color + piece_type
-            if piece_type == chess.BISHOP:
-                # Bishops on white diagonals go in the 0/7 index instead of 3/10.
-                index = index - 3 * is_white_square(square)
-
-            plane[rank, file, index] = 1
-    if board.turn == chess.WHITE:
-        col = 1
-    else:
-        col = 0
-    plane[:, :, 14] = col
-    return plane
-
-
-def board_label(board):
-    """Returns the training labels for the board from Syzygy lookup"""
-    # 0 draw for side-to-move, 1 win for side-to-move (more than 50 moves), 2 win for side-to-move
-    # -1 loss in more than 50, -2 loss in <50
-    with chess.syzygy.open_tablebase("c:/games/chess/syzygy") as tablebase:
-        # board = chess.Board("8/2K5/4B3/3N4/8/8/4k3/8 b - - 0 1")
-        wdl = tablebase.probe_wdl(board)
-
-    # 0 draw, x win in x, -x loss in x
-    # counts may be off by 1
-    with chess.syzygy.open_tablebase("c:/games/chess/syzygy") as tablebase:
-        # board = chess.Board("8/2K5/4B3/3N4/8/8/4k3/8 b - - 0 1")
-        dtz = tablebase.probe_dtz(board)
-    if wdl == 0:
-        win = 0
-        draw = 1
-        loss = 0
-    elif wdl > 0:
-        win = 1
-        draw = 0
-        loss = 0
-    else:
-        win = 0
-        draw = 0
-        loss = 1
-    if dtz > 0:
-        quality = 2000 - dtz
-    elif dtz < 0:
-        quality = -2000 - dtz
-    else:
-        quality = 0
-
-    return win, draw, loss, quality
-
-
-def adjust_case(input_str):
-    """This converts endgame descriptors so that the first block is capitalized"""
-    """and the second block is lowercase.  e.g.  krpkq to KRPkq"""
-    lower = input_str.lower()
-    second_k = lower.find("k", 1)
-    # print(f"second k at {second_k}")
-    out1 = lower[:second_k].upper()
-    out2 = lower[second_k:]
-    output_str = out1+out2
-    if second_k == -1:
-        output_str = "fail"
-    return output_str
-
-
-def ask_for_input():
-    print("Welcome to chess_pos_gen")
-    print("We are going to generate a file of chess endgame training examples")
-    print("to use in training a neural net.")
-    need_input = True
-    while need_input:
-        balance = input("Please enter the endgame (e.g. KRkp): ")
-        balance = adjust_case(balance)
-        # print(f"After Adjusting: {balance}")
-        number = int(input("Please enter the number of training examples to create: "))
-        if number > 0:
-            need_input = False
-        if balance == "fail":
-            need_input = True
-        if need_input:
-            print("There was a problem with the inputs.")
-
-    return balance, number
+def set_options():
+    print(f"Using Tensorflow {tf.__version__}")
+    # The following lines adjust the granularity of reporting.
+    pd.options.display.max_rows = 10
+    pd.options.display.float_format = "{:.3f}".format
+    # The following line improves formatting when ouputting NumPy arrays.
+    np.set_printoptions(linewidth=200)
 
 
 if __name__ == '__main__':
 
-    material_balance, target_count = ask_for_input()
+    set_options()
+    ask_gen_training()
 
-    # Note: it took about 1:30 to generate 10,000 positions
-    X_train = []
-    y_train = []
-    for i in range(target_count):
-        my_board = gen_fen(material_balance)
-        my_plane = board_to_planev1(my_board)
-        my_label = board_label(my_board)
-        X_train.append(my_plane)
-        y_train.append(my_label)
-        print(i)
+    (x_train, y_train4) = imp.import_endgame("C:/games/chess/train_krk100k.npz")
+    # Print a sample image
+    print(x_train.shape)
+    print(y_train4.shape)
+    print(y_train4[2918])
+    y_train = y_train4[:, 3]  # Column 3 is the score (-2000, 2000)
 
-    # Converts from a list to an array at the end; faster than concat array
-    X_train = np.stack(X_train, axis=0)
-    y_train = np.stack(y_train, axis=0)
-    print(X_train.shape)
-    print(y_train.shape)
+    ##############
+    # The following variables are the hyperparameters.
+    learning_rate = 0.003
+    epochs = 400
+    batch_size = 2000
+    validation_split = 0.2
 
-    outfile = "C:/games/chess/train_krk300kv1.npz"
-    # Save as a compressed npz file
-    np.savez_compressed(outfile, X_train=X_train, y_train=y_train)
-    print(f"Data saved to {outfile}")
+    # Establish the model's topography.
+    tb_callback = tf.keras.callbacks.TensorBoard(log_dir="logs/eg1/", histogram_freq=1)
+    my_model = defmod.create_model_eg1(learning_rate)
+    my_model.summary()
+    # Train the model on the normalized training set.
+    epochs, hist = train.train_model(my_model, tb_callback, x_train, y_train,
+                                     epochs, batch_size, validation_split)
+    print(hist.head())
+    # Plot a graph of the metric vs. epochs.
+    # list_of_metrics_to_plot = ['accuracy','val_accuracy']
+    list_of_metrics_to_plot = ['loss', 'val_loss']
+    gr.plot_curve(epochs, hist, list_of_metrics_to_plot)
 
-    # test that we can read the data
-    print("Doing a test read of the data")
-    npzfile2 = np.load(outfile)
-    #    print("npz variables")
-    #    print(npzfile.files)
-    #    print(npzfile['y_train'])
-    X_t2 = npzfile2['X_train']
-    y_t2 = npzfile2['y_train']
-    print(X_t2.shape)
-    print(y_t2.shape)
-    #print(y_t2)
+    # Evaluate against the test set.
+    # print("\n Evaluate the new model against the test set:")
+    # my_model.evaluate(x=x_test, y=y_test, batch_size=batch_size)
+    # predictions = my_model.predict(x_test)
+    # gr.plot15(x_test, y_test, predictions, class_names)
+    predictions = my_model.predict(x_train).flatten()
+    print("ytrain predictions")
+    diff = y_train - predictions
+    for x in range(200):
+        print(f"{y_train[x]} {predictions[x]:.3f} {int(diff[x])}")
