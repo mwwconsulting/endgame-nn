@@ -44,8 +44,8 @@ def ask_train_net():
     validation_split = 0.2
 
     # Establish the model's topography.
-    tb_callback = tf.keras.callbacks.TensorBoard(log_dir="logs/eg1/", histogram_freq=1)
-    my_model = defmod.create_model_eg1(learning_rate)
+    tb_callback = tf.keras.callbacks.TensorBoard(log_dir="logs/eg3c/", histogram_freq=1)
+    my_model = defmod.create_model_eg3c(learning_rate)
     my_model.summary()
     # Train the model on the normalized training set.
     epochs, hist = train.train_model(my_model, tb_callback, x_train, y_train,
@@ -68,7 +68,7 @@ def set_options():
     print(f"Using Tensorflow {tf.__version__}")
     # The following lines adjust the granularity of reporting.
     pd.options.display.max_rows = 10
-    pd.options.display.float_format = "{:.3f}".format
+    pd.options.display.float_format = "{:.6f}".format  # was .3f
     # The following line improves formatting when ouputting NumPy arrays.
     np.set_printoptions(linewidth=200)
 
