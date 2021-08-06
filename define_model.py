@@ -31,6 +31,7 @@ def create_model_eg2(my_learning_rate):
 
     return model
 
+
 def create_model_eg2b(my_learning_rate):
     """Create and compile a deep neural net."""
     # This is a first try to get a simple model that works
@@ -46,6 +47,7 @@ def create_model_eg2b(my_learning_rate):
                   metrics=['MeanSquaredError'])
 
     return model
+
 
 def create_model_eg2c(my_learning_rate):
     """Create and compile a deep neural net."""

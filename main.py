@@ -44,7 +44,7 @@ def ask_train_net():
     validation_split = 0.2
 
     # Establish the model's topography.
-    tb_callback = tf.keras.callbacks.TensorBoard(log_dir="logs/eg3c/", histogram_freq=1)
+    tb_callback = tf.keras.callbacks.TensorBoard(log_dir="logs/egB3c/", histogram_freq=1)
     my_model = defmod.create_model_eg3c(learning_rate)
     my_model.summary()
     # Train the model on the normalized training set.

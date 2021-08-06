@@ -23,9 +23,7 @@ def gen_fen(material):
         location = dest_squares.pop()
         board.set_piece_at(location, chess.Piece.from_symbol(piece))
     # Step 4: Check that the position is valid
-    if board.is_valid():
-        pass
-    else:
+    if not board.is_valid() or board.is_checkmate() or board.is_stalemate():
         # Recursively get a new try
         board = gen_fen(material)
     return board
@@ -206,6 +204,10 @@ def generate_training():
     y_train = np.stack(y_train, axis=0)
     print(X_train.shape)
     print(y_train.shape)
+    print("frequency list:")
+    unique_elements, counts_elements = np.unique(y_train[:, 3], return_counts=True)
+    print("Frequency of unique values of the said array:")
+    print(np.asarray((unique_elements, counts_elements)))
 
     outfile = "C:/games/chess/train_"+material_balance+str(int(target_count/1000))+"K"+plane_version+".npz"
     # Save as a compressed npz file
