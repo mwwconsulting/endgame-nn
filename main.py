@@ -38,14 +38,14 @@ def ask_train_net():
 
     ##############
     # The following variables are the hyperparameters.
-    learning_rate = 0.003
-    epochs = 400
+    learning_rate = 0.01
+    epochs = 200
     batch_size = 2000
     validation_split = 0.2
 
     # Establish the model's topography.
-    tb_callback = tf.keras.callbacks.TensorBoard(log_dir="logs/egB3c/", histogram_freq=1)
-    my_model = defmod.create_model_eg3c(learning_rate)
+    tb_callback = tf.keras.callbacks.TensorBoard(log_dir="logs/bin2b/", histogram_freq=1)
+    my_model = defmod.create_model_eg_bin2b(learning_rate)
     my_model.summary()
     # Train the model on the normalized training set.
     epochs, hist = train.train_model(my_model, tb_callback, x_train, y_train,
