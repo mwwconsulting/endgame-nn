@@ -2,3 +2,6 @@
 /logs/
 /githubssh
 /githubssh.pub
+positions.epd
+/__pycache__/
+/training/

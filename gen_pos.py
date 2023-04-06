@@ -8,25 +8,91 @@ def gen_fen(material):
     """Return a board with the specific material balance"""""
     # Step 1: Create a blank board with either white or black to move
     # We are assuming no castling or ep capture will be possible
-    if random.randint(0, 1) == 1:
-        board = chess.Board('8/8/8/8/8/8/8/8 w - - 0 1')
-    else:
-        board = chess.Board('8/8/8/8/8/8/8/8 b - - 0 1')
+
 
     # Step 2: Decide whether the first group of material is for white or black
     if random.randint(0, 1) == 1:
         material = material.swapcase()
 
     # Step 3: Loop over material and add it to the board
-    dest_squares = random.sample(range(64), len(material))
-    for piece in material:
-        location = dest_squares.pop()
-        board.set_piece_at(location, chess.Piece.from_symbol(piece))
-    # Step 4: Check that the position is valid
-    if not board.is_valid() or board.is_checkmate() or board.is_stalemate():
-        # Recursively get a new try
-        board = gen_fen(material)
-    return board
+    while True:
+        if random.randint(0, 1) == 1:
+            board = chess.Board('8/8/8/8/8/8/8/8 w - - 0 1')
+        else:
+            board = chess.Board('8/8/8/8/8/8/8/8 b - - 0 1')
+        dest_squares = random.sample(range(64), len(material))
+        for piece in material:
+            location = dest_squares.pop()
+            pc = chess.Piece.from_symbol(piece)
+            board.set_piece_at(location, pc)
+		# Step 4: Check that the position is valid
+        if board.is_valid() and not board.is_checkmate() and not board.is_stalemate():
+			# Recursively get a new try
+            return board
+# def gen_fen(material):
+#     """Return a board with the specific material balance"""
+#     # Step 1: Create a blank board with either white or black to move
+#     # We are assuming no castling or ep capture will be possible
+#     if random.randint(0, 1) == 1:
+#         board = chess.Board('8/8/8/8/8/8/8/8 w - - 0 1')
+#     else:
+#         board = chess.Board('8/8/8/8/8/8/8/8 b - - 0 1')
+
+#     # Step 2: Decide whether the first group of material is for white or black
+#     if random.randint(0, 1) == 1:
+#         material = material.swapcase()
+
+#     # Step 3: Generate random squares for piece placement
+#     dest_squares = random.sample(range(64), len(material))
+
+#     # Step 4: Loop over material and add it to the board
+#     #for piece, location in zip(material, dest_squares):
+#     #    board.set_piece_at(location, chess.Piece.from_symbol(piece))
+#     for piece in material:
+#         location = dest_squares.pop()
+#         board.set_piece_at(location, chess.Piece.from_symbol(piece))
+#     # Step 5: Check that the position is valid
+# #    max_tries = 1000
+# #    num_tries = 0
+#     while not board.is_valid() or board.is_checkmate() or board.is_stalemate():
+#         # Try again with new random squares
+#         dest_squares = random.sample(range(64), len(material))
+#        # for piece, location in zip(material, dest_squares):
+#        #     board.set_piece_at(location, chess.Piece.from_symbol(piece))
+#         for piece in material:
+#             location = dest_squares.pop()
+#             board.set_piece_at(location, chess.Piece.from_symbol(piece))
+
+#     # Step 6: Return the FEN string for the board
+#     return board
+
+# def gen_fen(balance: str) -> chess.Board:
+#     pieces = balance.swapcase() if random.choice([True, False]) else balance
+#     board = chess.Board()
+#     piece_map = {}
+#     while True:
+#         piece_map.clear()
+# 
+#         for piece in pieces:
+#             pc = chess.Piece.from_symbol(piece)
+#             if pc.piece_type == chess.PAWN:
+#                 r1 = 1
+#                 r2 = 6
+#             else:
+#                 r1 = 0
+#                 r2 = 7
+# 
+#             square = None
+#             while square is None or square in piece_map:
+#                 square = chess.square(random.randint(0, 7), random.randint(r1,r2))
+# 
+#             piece_map[square] = pc
+# 
+#             board.set_piece_map(piece_map)
+#             print(f"Board: {board}")
+#             if board.is_valid() and not board.is_stalemate() and not board.is_checkmate():
+#                 return board
+
 
 
 def is_white_square(square):
@@ -119,19 +185,18 @@ def board_to_planev1(board):
     return plane
 
 
-def board_label(board):
+def board_label(board, tablebase, f):
     """Returns the training labels for the board from Syzygy lookup"""
     # 0 draw for side-to-move, 1 win for side-to-move (more than 50 moves), 2 win for side-to-move
     # -1 loss in more than 50, -2 loss in <50
-    with chess.syzygy.open_tablebase("c:/games/chess/syzygy") as tablebase:
         # board = chess.Board("8/2K5/4B3/3N4/8/8/4k3/8 b - - 0 1")
-        wdl = tablebase.probe_wdl(board)
+    wdl = tablebase.probe_wdl(board)
 
     # 0 draw, x win in x, -x loss in x
     # counts may be off by 1
-    with chess.syzygy.open_tablebase("c:/games/chess/syzygy") as tablebase:
+   
         # board = chess.Board("8/2K5/4B3/3N4/8/8/4k3/8 b - - 0 1")
-        dtz = tablebase.probe_dtz(board)
+    dtz = tablebase.probe_dtz(board)
     if wdl == 0:
         win = 0
         draw = 1
@@ -150,7 +215,7 @@ def board_label(board):
         quality = -2000 - dtz
     else:
         quality = 0
-
+    print(f"{board.fen()}|{dtz}|{float(win + (draw/2) - loss):.1f}", file=f)
     return win, draw, loss, quality
 
 
@@ -184,35 +249,38 @@ def ask_for_input():
 
     return balance, number
 
-
+from tqdm import tqdm
 def generate_training():
     material_balance, target_count = ask_for_input()
     plane_version = 'v1'
+    epdfile = "positions.epd"
     # Note: it took about 1:30 to generate 10,000 positions
     X_train = []
     y_train = []
-    for i in range(target_count):
-        my_board = gen_fen(material_balance)
-        my_plane = board_to_planev1(my_board)
-        my_label = board_label(my_board)
-        X_train.append(my_plane)
-        y_train.append(my_label)
-        print(i)
+    with chess.syzygy.open_tablebase("/Volumes/Samsung_T5/egdb") as tablebase:
+        with open('positions.epd', 'a') as f:    
+            for i in tqdm(range(target_count), desc="Generating...", ascii=False, ncols=75):
+                my_board = gen_fen(material_balance)
+                my_plane = board_to_planev1(my_board)
+                my_label = board_label(my_board, tablebase, f)
+                X_train.append(my_plane)
+                y_train.append(my_label)
+                #print(i)
 
-    # Converts from a list to an array at the end; faster than concat array
-    X_train = np.stack(X_train, axis=0)
-    y_train = np.stack(y_train, axis=0)
-    print(X_train.shape)
-    print(y_train.shape)
-    print("frequency list:")
-    unique_elements, counts_elements = np.unique(y_train[:, 3], return_counts=True)
-    print("Frequency of unique values of the said array:")
-    print(np.asarray((unique_elements, counts_elements)))
+        # Converts from a list to an array at the end; faster than concat array
+        X_train = np.stack(X_train, axis=0)
+        y_train = np.stack(y_train, axis=0)
+        print(X_train.shape)
+        print(y_train.shape)
+        print("frequency list:")
+        unique_elements, counts_elements = np.unique(y_train[:, 3], return_counts=True)
+        print("Frequency of unique values of the said array:")
+        print(np.asarray((unique_elements, counts_elements)))
 
-    outfile = "C:/games/chess/train_"+material_balance+str(int(target_count/1000))+"K"+plane_version+".npz"
-    # Save as a compressed npz file
-    np.savez_compressed(outfile, X_train=X_train, y_train=y_train)
-    print(f"Data saved to {outfile}")
+        outfile = "./training/train_"+material_balance+str(int(target_count/1000))+"K"+plane_version+".npz"
+        # Save as a compressed npz file
+        np.savez_compressed(outfile, X_train=X_train, y_train=y_train)
+        print(f"Data saved to {outfile}")
 
     # test that we can read the data
     # print("Doing a test read of the data")
@@ -225,3 +293,9 @@ def generate_training():
     # print(X_t2.shape)
     # print(y_t2.shape)
     #print(y_t2)
+if __name__ == '__main__':
+    yes_no = input("Do you need to generate endgame training data? ")
+    if len(yes_no) == 0:
+        pass
+    elif yes_no[0].lower() == "y":
+        generate_training()

@@ -27,7 +27,7 @@ def ask_train_net():
     # Get the data to use for training
     plane_version="v1"
     material_balance, target_count = gp.ask_for_input()
-    input_file = "C:/games/chess/train_"+material_balance+str(int(target_count/1000))+"K"+plane_version+".npz"
+    input_file = "./training/train_"+material_balance+str(int(target_count/1000))+"K"+plane_version+".npz"
 
     (x_train, y_train4) = imp.import_endgame(input_file)
     # Print a sample image
